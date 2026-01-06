@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, X, Save } from 'lucide-react';
+import { Plus, Trash2, X, Save, Pencil } from 'lucide-react'; // Pastikan Pencil diimport
 
 export default function QuickNotes() {
   // --- STATE DENGAN ANTI-CRASH ---
@@ -16,6 +16,9 @@ export default function QuickNotes() {
   
   const [isAdding, setIsAdding] = useState(false);
   const [input, setInput] = useState({ title: '', content: '' });
+  
+  // STATE BARU: Untuk melacak ID catatan yang sedang diedit
+  const [editingId, setEditingId] = useState(null);
 
   // --- AUTO SAVE (DENGAN ANTI-CRASH) ---
   useEffect(() => {
@@ -38,20 +41,50 @@ export default function QuickNotes() {
   const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
   // --- HANDLER ---
-  const addNote = () => {
+  
+  // 1. Fungsi Handle Save (Digabungkan untuk Add & Edit)
+  const handleSave = () => {
     if (!input.title.trim() && !input.content.trim()) return;
     
-    const newNote = {
-      id: Date.now(),
-      title: input.title,
-      content: input.content,
-      date: new Date().toLocaleDateString('id-ID'),
-      color: getRandomColor()
-    };
+    if (editingId) {
+      // LOGIKA EDIT: Update catatan yang sudah ada
+      setNotes(notes.map(note => 
+        note.id === editingId 
+          ? { ...note, title: input.title, content: input.content } 
+          : note
+      ));
+    } else {
+      // LOGIKA ADD: Buat catatan baru
+      const newNote = {
+        id: Date.now(),
+        title: input.title,
+        content: input.content,
+        date: new Date().toLocaleDateString('id-ID'),
+        color: getRandomColor()
+      };
+      setNotes([newNote, ...notes]);
+    }
 
-    setNotes([newNote, ...notes]);
+    // Reset Form
     setInput({ title: '', content: '' });
+    setEditingId(null);
     setIsAdding(false);
+  };
+
+  // 2. Fungsi Mulai Edit
+  const startEdit = (note) => {
+    setInput({ title: note.title, content: note.content });
+    setEditingId(note.id);
+    setIsAdding(true); // Buka modal yang sama
+  };
+
+  // 3. Fungsi Reset/Close (Saat tombol silang diklik)
+  const closeForm = () => {
+    setIsAdding(false);
+    // Beri sedikit delay agar animasi exit selesai baru state direset, 
+    // atau langsung reset juga aman.
+    setEditingId(null);
+    setInput({ title: '', content: '' });
   };
 
   const deleteNote = (id) => {
@@ -67,7 +100,12 @@ export default function QuickNotes() {
           {notes.length} Catatan tersimpan
         </p>
         <button 
-          onClick={() => setIsAdding(true)}
+          onClick={() => {
+            // Pastikan saat klik "Buat Baru", state edit bersih
+            setEditingId(null);
+            setInput({ title: '', content: '' });
+            setIsAdding(true);
+          }}
           className="bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-md"
         >
           <Plus size={16} /> Buat Baru
@@ -84,8 +122,13 @@ export default function QuickNotes() {
             className="absolute top-12 left-0 right-0 z-20 bg-white border border-slate-200 shadow-xl rounded-2xl p-4 mx-1"
           >
             <div className="flex justify-between items-start mb-2">
-              <h4 className="font-bold text-slate-700">Tulis Catatan</h4>
-              <button onClick={() => setIsAdding(false)} className="text-slate-300 hover:text-slate-500"><X size={18}/></button>
+              {/* Judul dinamis tergantung sedang edit atau tambah baru */}
+              <h4 className="font-bold text-slate-700">
+                {editingId ? 'Edit Catatan' : 'Tulis Catatan'}
+              </h4>
+              <button onClick={closeForm} className="text-slate-300 hover:text-slate-500">
+                <X size={18}/>
+              </button>
             </div>
             <input 
               className="w-full text-lg font-bold text-slate-800 placeholder:text-slate-300 outline-none mb-2"
@@ -102,10 +145,10 @@ export default function QuickNotes() {
             />
             <div className="flex justify-end mt-2">
               <button 
-                onClick={addNote}
+                onClick={handleSave}
                 className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm active:scale-95 transition-transform flex items-center gap-2"
               >
-                <Save size={16} /> Simpan
+                <Save size={16} /> {editingId ? 'Update' : 'Simpan'}
               </button>
             </div>
           </motion.div>
@@ -133,12 +176,26 @@ export default function QuickNotes() {
                 >
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider">{note.date}</span>
-                    <button 
-                      onClick={() => deleteNote(note.id)}
-                      className="text-slate-800/20 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    
+                    {/* ACTION BUTTONS */}
+                    <div className="flex gap-2">
+                      {/* Tombol Edit Baru */}
+                      <button 
+                        onClick={() => startEdit(note)}
+                        className="text-slate-800/20 hover:text-blue-600 transition-colors"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      
+                      {/* Tombol Hapus Lama */}
+                      <button 
+                        onClick={() => deleteNote(note.id)}
+                        className="text-slate-800/20 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
                   </div>
                   <h3 className="font-bold text-lg leading-tight mb-1">{note.title}</h3>
                   <p className="text-sm opacity-90 whitespace-pre-wrap">{note.content}</p>
