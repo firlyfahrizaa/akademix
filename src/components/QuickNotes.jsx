@@ -3,22 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, X, Save, Pencil } from 'lucide-react';
 
 export default function QuickNotes() {
-  // --- STATE ---
-  const [notes, setNotes] = useState(() => {
-    const saved = localStorage.getItem('akademix_notes');
-    return saved ? JSON.parse(saved) : [];
-  });
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [input, setInput] = useState({ title: '', content: '' });
-  const [editId, setEditId] = useState(null); // ID catatan yang sedang diedit (null kalau bikin baru)
-
-  // --- AUTO SAVE ---
-  useEffect(() => {
-    localStorage.setItem('akademix_notes', JSON.stringify(notes));
-  }, [notes]);
-
-  // --- COLORS ---
+  // --- 1. DEFINISI WARNA (Pindahkan ke paling atas biar kebaca duluan) ---
   const colors = [
     'bg-yellow-100 text-yellow-800 border-yellow-200',
     'bg-blue-100 text-blue-800 border-blue-200',
@@ -29,6 +15,27 @@ export default function QuickNotes() {
 
   const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
+  // --- 2. STATE (Dengan "Auto-Repair" Warna) ---
+  const [notes, setNotes] = useState(() => {
+    const saved = localStorage.getItem('akademix_notes');
+    let data = saved ? JSON.parse(saved) : [];
+    
+    // LOGIC PERBAIKAN: Cek setiap catatan, kalau warnanya hilang, kasih warna baru
+    return data.map(note => ({
+      ...note,
+      color: note.color || getRandomColor() // Fallback color
+    }));
+  });
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [input, setInput] = useState({ title: '', content: '' });
+  const [editId, setEditId] = useState(null);
+
+  // --- AUTO SAVE ---
+  useEffect(() => {
+    localStorage.setItem('akademix_notes', JSON.stringify(notes));
+  }, [notes]);
+
   // --- HANDLER: SAVE (CREATE / UPDATE) ---
   const handleSave = () => {
     if (!input.title.trim() && !input.content.trim()) return;
@@ -37,7 +44,12 @@ export default function QuickNotes() {
       // MODE EDIT: Update catatan yang sudah ada
       setNotes(notes.map(note => 
         note.id === editId 
-          ? { ...note, title: input.title, content: input.content, date: 'Diedit: ' + new Date().toLocaleDateString('id-ID') } 
+          ? { 
+              ...note, // Pertahankan data lama (termasuk WARNA)
+              title: input.title, 
+              content: input.content, 
+              date: 'Diedit: ' + new Date().toLocaleDateString('id-ID') 
+            } 
           : note
       ));
     } else {
@@ -47,7 +59,7 @@ export default function QuickNotes() {
         title: input.title,
         content: input.content,
         date: new Date().toLocaleDateString('id-ID'),
-        color: getRandomColor()
+        color: getRandomColor() // Warna random untuk baru
       };
       setNotes([newNote, ...notes]);
     }
@@ -55,9 +67,9 @@ export default function QuickNotes() {
     closeModal();
   };
 
-  // --- HANDLER: DELETE (DENGAN KONFIRMASI) ---
+  // --- HANDLER: DELETE ---
   const handleDelete = (e, id) => {
-    e.stopPropagation(); // Biar pas klik hapus, nggak malah ngebuka mode edit
+    e.stopPropagation(); 
     if (window.confirm("Yakin mau menghapus catatan ini?")) {
       setNotes(notes.filter(n => n.id !== id));
     }
@@ -85,7 +97,7 @@ export default function QuickNotes() {
   return (
     <div className="h-full flex flex-col relative">
       
-      {/* 1. HEADER */}
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-4 px-1">
         <p className="text-sm text-slate-400 font-medium">
           {notes.length} Catatan
@@ -98,7 +110,7 @@ export default function QuickNotes() {
         </button>
       </div>
 
-      {/* 2. MODAL FORM (Overlay) */}
+      {/* MODAL FORM */}
       <AnimatePresence>
         {isModalOpen && (
           <motion.div 
@@ -142,7 +154,7 @@ export default function QuickNotes() {
         )}
       </AnimatePresence>
 
-      {/* 3. LIST NOTES */}
+      {/* LIST NOTES */}
       <div className="flex-1 overflow-y-auto pb-20 pr-1">
         {notes.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-50">
@@ -159,17 +171,15 @@ export default function QuickNotes() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
-                  onClick={() => openEdit(note)} // KLIK KARTU UNTUK EDIT
+                  onClick={() => openEdit(note)} 
                   className={`p-4 rounded-2xl border ${note.color} relative group transition-all hover:shadow-md cursor-pointer active:scale-[0.98]`}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider">{note.date}</span>
                     <div className="flex gap-2">
-                      {/* Icon Pencil (Indikator bisa diedit) */}
                       <span className="opacity-0 group-hover:opacity-40 transition-opacity">
                         <Pencil size={14} />
                       </span>
-                      {/* Tombol Hapus */}
                       <button 
                         onClick={(e) => handleDelete(e, note.id)}
                         className="text-slate-800/20 hover:text-red-500 transition-colors z-10"
