@@ -3,11 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Save } from 'lucide-react';
 
 export default function IpkCalculator() {
-  // --- STATE ---
-  // Ambil data dari LocalStorage saat pertama kali load
+  // --- STATE DENGAN ANTI-CRASH ---
   const [matkul, setMatkul] = useState(() => {
-    const saved = localStorage.getItem('akademix_ipk');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      // Coba baca data
+      const saved = localStorage.getItem('akademix_ipk');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      // Kalau error, jangan crash! Pakai array kosong aja.
+      console.error("Gagal baca storage:", e);
+      return [];
+    }
   });
 
   const [input, setInput] = useState({ name: '', sks: 2, grade: 'A' });
@@ -19,9 +25,13 @@ export default function IpkCalculator() {
   const totalPoints = matkul.reduce((acc, curr) => acc + (curr.sks * gradePoints[curr.grade]), 0);
   const ipk = totalSKS === 0 ? 0 : (totalPoints / totalSKS).toFixed(2);
 
-  // --- EFFEECT: AUTO SAVE ---
+  // --- EFFECT: AUTO SAVE (DENGAN ANTI-CRASH) ---
   useEffect(() => {
-    localStorage.setItem('akademix_ipk', JSON.stringify(matkul));
+    try {
+      localStorage.setItem('akademix_ipk', JSON.stringify(matkul));
+    } catch (e) {
+      console.error("Gagal simpan data:", e);
+    }
   }, [matkul]);
 
   // --- HANDLER ---

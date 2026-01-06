@@ -3,18 +3,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, X, Save } from 'lucide-react';
 
 export default function QuickNotes() {
-  // --- STATE ---
+  // --- STATE DENGAN ANTI-CRASH ---
   const [notes, setNotes] = useState(() => {
-    const saved = localStorage.getItem('akademix_notes');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('akademix_notes');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Gagal baca notes:", e);
+      return [];
+    }
   });
   
   const [isAdding, setIsAdding] = useState(false);
   const [input, setInput] = useState({ title: '', content: '' });
 
-  // --- AUTO SAVE ---
+  // --- AUTO SAVE (DENGAN ANTI-CRASH) ---
   useEffect(() => {
-    localStorage.setItem('akademix_notes', JSON.stringify(notes));
+    try {
+      localStorage.setItem('akademix_notes', JSON.stringify(notes));
+    } catch (e) {
+      console.error("Gagal simpan notes:", e);
+    }
   }, [notes]);
 
   // --- COLORS (Pastel) ---
