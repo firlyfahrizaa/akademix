@@ -4,7 +4,7 @@ import { Plus, Trash2, X, Save, Pencil } from 'lucide-react';
 
 export default function QuickNotes() {
   
-  // --- 1. DEFINISI WARNA (Pindahkan ke paling atas biar kebaca duluan) ---
+  // --- 1. DAFTAR WARNA ---
   const colors = [
     'bg-yellow-100 text-yellow-800 border-yellow-200',
     'bg-blue-100 text-blue-800 border-blue-200',
@@ -15,16 +15,23 @@ export default function QuickNotes() {
 
   const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
-  // --- 2. STATE (Dengan "Auto-Repair" Warna) ---
+  // --- 2. STATE (Dengan Auto-Fix Data Lama) ---
   const [notes, setNotes] = useState(() => {
-    const saved = localStorage.getItem('akademix_notes');
-    let data = saved ? JSON.parse(saved) : [];
-    
-    // LOGIC PERBAIKAN: Cek setiap catatan, kalau warnanya hilang, kasih warna baru
-    return data.map(note => ({
-      ...note,
-      color: note.color || getRandomColor() // Fallback color
-    }));
+    try {
+      const saved = localStorage.getItem('akademix_notes');
+      let data = saved ? JSON.parse(saved) : [];
+      
+      // Jika data bukan array (rusak), reset jadi kosong
+      if (!Array.isArray(data)) return [];
+
+      // Perbaiki setiap catatan yang tidak punya warna
+      return data.map(note => ({
+        ...note,
+        color: (note.color && note.color.includes('bg-')) ? note.color : getRandomColor()
+      }));
+    } catch (e) {
+      return [];
+    }
   });
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,30 +43,32 @@ export default function QuickNotes() {
     localStorage.setItem('akademix_notes', JSON.stringify(notes));
   }, [notes]);
 
-  // --- HANDLER: SAVE (CREATE / UPDATE) ---
+  // --- HANDLER: SAVE ---
   const handleSave = () => {
     if (!input.title.trim() && !input.content.trim()) return;
 
     if (editId) {
-      // MODE EDIT: Update catatan yang sudah ada
+      // Update Mode
       setNotes(notes.map(note => 
         note.id === editId 
           ? { 
-              ...note, // Pertahankan data lama (termasuk WARNA)
+              ...note, 
               title: input.title, 
               content: input.content, 
+              // Jaga warna lama, kalau hilang kasih baru
+              color: note.color || getRandomColor(), 
               date: 'Diedit: ' + new Date().toLocaleDateString('id-ID') 
             } 
           : note
       ));
     } else {
-      // MODE BARU: Bikin catatan baru
+      // Create Mode
       const newNote = {
         id: Date.now(),
         title: input.title,
         content: input.content,
         date: new Date().toLocaleDateString('id-ID'),
-        color: getRandomColor() // Warna random untuk baru
+        color: getRandomColor()
       };
       setNotes([newNote, ...notes]);
     }
@@ -75,7 +84,7 @@ export default function QuickNotes() {
     }
   };
 
-  // --- HANDLER: OPEN & CLOSE ---
+  // --- HANDLERS: MODAL ---
   const openNew = () => {
     setEditId(null);
     setInput({ title: '', content: '' });
@@ -172,7 +181,8 @@ export default function QuickNotes() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                   onClick={() => openEdit(note)} 
-                  className={`p-4 rounded-2xl border ${note.color} relative group transition-all hover:shadow-md cursor-pointer active:scale-[0.98]`}
+                  // ▼▼▼ PERBAIKAN UTAMA DISINI: Fallback Color ▼▼▼
+                  className={`p-4 rounded-2xl border ${note.color || colors[0]} relative group transition-all hover:shadow-md cursor-pointer active:scale-[0.98]`}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider">{note.date}</span>
