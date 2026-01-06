@@ -34,7 +34,18 @@ export default function FocusTimer() {
     setTimeLeft(mode === 'focus' ? 25 * 60 : 5 * 60);
   };
 
+  // VERSI BARU (DENGAN PENGAMAN)
   const switchMode = (newMode) => {
+    // 1. Kalau user klik tombol yang sama (misal lagi Fokus, klik Fokus lagi), diamkan saja.
+    if (mode === newMode) return;
+
+    // 2. Kalau timer sedang jalan, tanya dulu biar nggak sengaja kereset
+    if (isActive) {
+      const isSure = window.confirm("Timer sedang berjalan. Ganti mode akan mereset waktu. Lanjut?");
+      if (!isSure) return; // Kalau user klik Cancel, batalkan.
+    }
+
+    // Kalau lolos, baru ganti mode
     setMode(newMode);
     setIsActive(false);
     setTimeLeft(newMode === 'focus' ? 25 * 60 : 5 * 60);
