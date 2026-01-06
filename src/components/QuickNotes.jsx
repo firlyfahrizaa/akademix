@@ -1,32 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, X, Save } from 'lucide-react';
+import { Plus, Trash2, X, Save, Pencil } from 'lucide-react';
 
 export default function QuickNotes() {
-  // --- STATE DENGAN ANTI-CRASH ---
+  // --- STATE ---
   const [notes, setNotes] = useState(() => {
-    try {
-      const saved = localStorage.getItem('akademix_notes');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.error("Gagal baca notes:", e);
-      return [];
-    }
+    const saved = localStorage.getItem('akademix_notes');
+    return saved ? JSON.parse(saved) : [];
   });
   
-  const [isAdding, setIsAdding] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [input, setInput] = useState({ title: '', content: '' });
+  const [editId, setEditId] = useState(null); // ID catatan yang sedang diedit (null kalau bikin baru)
 
-  // --- AUTO SAVE (DENGAN ANTI-CRASH) ---
+  // --- AUTO SAVE ---
   useEffect(() => {
-    try {
-      localStorage.setItem('akademix_notes', JSON.stringify(notes));
-    } catch (e) {
-      console.error("Gagal simpan notes:", e);
-    }
+    localStorage.setItem('akademix_notes', JSON.stringify(notes));
   }, [notes]);
 
-  // --- COLORS (Pastel) ---
+  // --- COLORS ---
   const colors = [
     'bg-yellow-100 text-yellow-800 border-yellow-200',
     'bg-blue-100 text-blue-800 border-blue-200',
@@ -37,46 +29,78 @@ export default function QuickNotes() {
 
   const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
 
-  // --- HANDLER ---
-  const addNote = () => {
+  // --- HANDLER: SAVE (CREATE / UPDATE) ---
+  const handleSave = () => {
     if (!input.title.trim() && !input.content.trim()) return;
-    
-    const newNote = {
-      id: Date.now(),
-      title: input.title,
-      content: input.content,
-      date: new Date().toLocaleDateString('id-ID'),
-      color: getRandomColor()
-    };
 
-    setNotes([newNote, ...notes]);
-    setInput({ title: '', content: '' });
-    setIsAdding(false);
+    if (editId) {
+      // MODE EDIT: Update catatan yang sudah ada
+      setNotes(notes.map(note => 
+        note.id === editId 
+          ? { ...note, title: input.title, content: input.content, date: 'Diedit: ' + new Date().toLocaleDateString('id-ID') } 
+          : note
+      ));
+    } else {
+      // MODE BARU: Bikin catatan baru
+      const newNote = {
+        id: Date.now(),
+        title: input.title,
+        content: input.content,
+        date: new Date().toLocaleDateString('id-ID'),
+        color: getRandomColor()
+      };
+      setNotes([newNote, ...notes]);
+    }
+    
+    closeModal();
   };
 
-  const deleteNote = (id) => {
-    setNotes(notes.filter(n => n.id !== id));
+  // --- HANDLER: DELETE (DENGAN KONFIRMASI) ---
+  const handleDelete = (e, id) => {
+    e.stopPropagation(); // Biar pas klik hapus, nggak malah ngebuka mode edit
+    if (window.confirm("Yakin mau menghapus catatan ini?")) {
+      setNotes(notes.filter(n => n.id !== id));
+    }
+  };
+
+  // --- HANDLER: OPEN & CLOSE ---
+  const openNew = () => {
+    setEditId(null);
+    setInput({ title: '', content: '' });
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (note) => {
+    setEditId(note.id);
+    setInput({ title: note.title, content: note.content });
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditId(null);
+    setInput({ title: '', content: '' });
   };
 
   return (
     <div className="h-full flex flex-col relative">
       
-      {/* 1. HEADER & ADD BUTTON */}
+      {/* 1. HEADER */}
       <div className="flex justify-between items-center mb-4 px-1">
         <p className="text-sm text-slate-400 font-medium">
-          {notes.length} Catatan tersimpan
+          {notes.length} Catatan
         </p>
         <button 
-          onClick={() => setIsAdding(true)}
+          onClick={openNew}
           className="bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-md"
         >
           <Plus size={16} /> Buat Baru
         </button>
       </div>
 
-      {/* 2. FORM INPUT (Overlay Modal Kecil) */}
+      {/* 2. MODAL FORM (Overlay) */}
       <AnimatePresence>
-        {isAdding && (
+        {isModalOpen && (
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -84,25 +108,31 @@ export default function QuickNotes() {
             className="absolute top-12 left-0 right-0 z-20 bg-white border border-slate-200 shadow-xl rounded-2xl p-4 mx-1"
           >
             <div className="flex justify-between items-start mb-2">
-              <h4 className="font-bold text-slate-700">Tulis Catatan</h4>
-              <button onClick={() => setIsAdding(false)} className="text-slate-300 hover:text-slate-500"><X size={18}/></button>
+              <h4 className="font-bold text-slate-700">
+                {editId ? 'Edit Catatan' : 'Tulis Catatan'}
+              </h4>
+              <button onClick={closeModal} className="text-slate-300 hover:text-slate-500">
+                <X size={18}/>
+              </button>
             </div>
+            
             <input 
-              className="w-full text-lg font-bold text-slate-800 placeholder:text-slate-300 outline-none mb-2"
+              className="w-full text-lg font-bold text-slate-800 placeholder:text-slate-300 outline-none mb-2 bg-transparent"
               placeholder="Judul (Contoh: Tugas RPL)"
               value={input.title}
               onChange={(e) => setInput({...input, title: e.target.value})}
               autoFocus
             />
             <textarea 
-              className="w-full h-20 text-sm text-slate-600 placeholder:text-slate-300 outline-none resize-none"
+              className="w-full h-24 text-sm text-slate-600 placeholder:text-slate-300 outline-none resize-none bg-transparent"
               placeholder="Isi catatan disini..."
               value={input.content}
               onChange={(e) => setInput({...input, content: e.target.value})}
             />
+            
             <div className="flex justify-end mt-2">
               <button 
-                onClick={addNote}
+                onClick={handleSave}
                 className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm active:scale-95 transition-transform flex items-center gap-2"
               >
                 <Save size={16} /> Simpan
@@ -112,7 +142,7 @@ export default function QuickNotes() {
         )}
       </AnimatePresence>
 
-      {/* 3. LIST NOTES (Masonry Grid) */}
+      {/* 3. LIST NOTES */}
       <div className="flex-1 overflow-y-auto pb-20 pr-1">
         {notes.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-50">
@@ -129,19 +159,27 @@ export default function QuickNotes() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
-                  className={`p-4 rounded-2xl border ${note.color} relative group transition-shadow hover:shadow-sm`}
+                  onClick={() => openEdit(note)} // KLIK KARTU UNTUK EDIT
+                  className={`p-4 rounded-2xl border ${note.color} relative group transition-all hover:shadow-md cursor-pointer active:scale-[0.98]`}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider">{note.date}</span>
-                    <button 
-                      onClick={() => deleteNote(note.id)}
-                      className="text-slate-800/20 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex gap-2">
+                      {/* Icon Pencil (Indikator bisa diedit) */}
+                      <span className="opacity-0 group-hover:opacity-40 transition-opacity">
+                        <Pencil size={14} />
+                      </span>
+                      {/* Tombol Hapus */}
+                      <button 
+                        onClick={(e) => handleDelete(e, note.id)}
+                        className="text-slate-800/20 hover:text-red-500 transition-colors z-10"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                   <h3 className="font-bold text-lg leading-tight mb-1">{note.title}</h3>
-                  <p className="text-sm opacity-90 whitespace-pre-wrap">{note.content}</p>
+                  <p className="text-sm opacity-90 whitespace-pre-wrap line-clamp-3">{note.content}</p>
                 </motion.div>
               ))}
             </AnimatePresence>
