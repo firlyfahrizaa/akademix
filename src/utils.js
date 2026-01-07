@@ -1,7 +1,7 @@
 // src/utils.js
 
 // 1. Alamat Backend Django (Nanti kalau deploy, ganti ini)
-export const API_BASE = 'https://firlyfahriza.pythonanywhere.com/api';
+export const API_BASE = 'https://firlyfahriza.pythonanywhere.com/';
 
 // 2. Fungsi Generate ID Unik (Biar data gak ketuker)
 export const getDeviceId = () => {
