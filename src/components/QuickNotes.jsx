@@ -1,211 +1,237 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, X, Save, Pencil } from 'lucide-react'; // Pastikan Pencil diimport
+import { Plus, Trash2, X, Save, Pencil, Loader2 } from 'lucide-react';
+import { API_BASE, getHeaders } from '../utils';
 
 export default function QuickNotes() {
-  // --- STATE DENGAN ANTI-CRASH ---
-  const [notes, setNotes] = useState(() => {
-    try {
-      const saved = localStorage.getItem('akademix_notes');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      console.error("Gagal baca notes:", e);
-      return [];
-    }
-  });
+  // --- STATE ---
+  const [notes, setNotes] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   
+  // State UI
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null); // <-- ID note yang lagi diedit (null kalau baru)
+  
+  // State Form
   const [input, setInput] = useState({ title: '', content: '' });
   
-  // STATE BARU: Untuk melacak ID catatan yang sedang diedit
-  const [editingId, setEditingId] = useState(null);
-
-  // --- AUTO SAVE (DENGAN ANTI-CRASH) ---
+  // --- LOAD DATA ---
   useEffect(() => {
-    try {
-      localStorage.setItem('akademix_notes', JSON.stringify(notes));
-    } catch (e) {
-      console.error("Gagal simpan notes:", e);
-    }
-  }, [notes]);
+    fetch(`${API_BASE}/notes/`, { headers: getHeaders() })
+      .then(res => res.json())
+      .then(data => {
+        const formatted = data.map(item => ({
+          ...item,
+          date: new Date(item.created_at).toLocaleDateString('id-ID', {
+            day: 'numeric', month: 'short', year: 'numeric'
+          })
+        }));
+        setNotes(formatted);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Error:", err);
+        setIsLoading(false);
+      });
+  }, []);
 
-  // --- COLORS (Pastel) ---
-  const colors = [
-    'bg-yellow-100 text-yellow-800 border-yellow-200',
-    'bg-blue-100 text-blue-800 border-blue-200',
-    'bg-pink-100 text-pink-800 border-pink-200',
-    'bg-green-100 text-green-800 border-green-200',
-    'bg-purple-100 text-purple-800 border-purple-200',
-  ];
-
-  const getRandomColor = () => colors[Math.floor(Math.random() * colors.length)];
-
-  // --- HANDLER ---
-  
-  // 1. Fungsi Handle Save (Digabungkan untuk Add & Edit)
-  const handleSave = () => {
-    if (!input.title.trim() && !input.content.trim()) return;
-    
-    if (editingId) {
-      // LOGIKA EDIT: Update catatan yang sudah ada
-      setNotes(notes.map(note => 
-        note.id === editingId 
-          ? { ...note, title: input.title, content: input.content } 
-          : note
-      ));
-    } else {
-      // LOGIKA ADD: Buat catatan baru
-      const newNote = {
-        id: Date.now(),
-        title: input.title,
-        content: input.content,
-        date: new Date().toLocaleDateString('id-ID'),
-        color: getRandomColor()
-      };
-      setNotes([newNote, ...notes]);
-    }
-
-    // Reset Form
-    setInput({ title: '', content: '' });
-    setEditingId(null);
-    setIsAdding(false);
-  };
-
-  // 2. Fungsi Mulai Edit
+  // --- LOGIC TOMBOL EDIT (PENSIL) ---
   const startEdit = (note) => {
-    setInput({ title: note.title, content: note.content });
-    setEditingId(note.id);
-    setIsAdding(true); // Buka modal yang sama
+    setInput({ title: note.title, content: note.content }); // Isi form dengan data lama
+    setEditingId(note.id); // Set ID yang mau diedit
+    setIsAdding(true); // Buka modal form
   };
 
-  // 3. Fungsi Reset/Close (Saat tombol silang diklik)
-  const closeForm = () => {
-    setIsAdding(false);
-    // Beri sedikit delay agar animasi exit selesai baru state direset, 
-    // atau langsung reset juga aman.
-    setEditingId(null);
-    setInput({ title: '', content: '' });
+  // --- LOGIC SIMPAN (BISA SAVE BARU / UPDATE LAMA) ---
+  const saveNote = async () => {
+    if (!input.title || !input.content) return;
+
+    const payload = {
+      title: input.title,
+      content: input.content,
+      color: 'bg-yellow-100 text-yellow-800 border-yellow-200' 
+    };
+
+    try {
+      let url = `${API_BASE}/notes/`;
+      let method = 'POST';
+
+      // Kalau lagi mode Edit:
+      if (editingId) {
+        method = 'PUT'; // Pake method PUT
+        payload.id = editingId; // Jangan lupa bawa ID-nya
+      }
+
+      const res = await fetch(url, {
+        method: method,
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+      });
+      
+      const data = await res.json();
+
+      if (data.status === 'saved' || data.status === 'updated') {
+        if (editingId) {
+          // UPDATE DI TAMPILAN (Edit Mode)
+          setNotes(notes.map(n => n.id === editingId ? { ...n, ...payload } : n));
+        } else {
+          // UPDATE DI TAMPILAN (New Mode)
+          const newNote = { id: data.id, ...payload, date: 'Baru saja' };
+          setNotes([newNote, ...notes]);
+        }
+        
+        // Reset Form & Tutup Modal
+        setIsAdding(false);
+        setEditingId(null);
+        setInput({ title: '', content: '' });
+      }
+    } catch (error) {
+      alert("Gagal simpan/update. Cek koneksi backend!");
+    }
   };
 
-  const deleteNote = (id) => {
+  // --- HAPUS DATA ---
+  const deleteNote = async (id) => {
     setNotes(notes.filter(n => n.id !== id));
+    try {
+      await fetch(`${API_BASE}/notes/`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+        body: JSON.stringify({ id })
+      });
+    } catch (error) { console.error("Gagal hapus"); }
   };
 
+  // --- RENDER UI ---
   return (
     <div className="h-full flex flex-col relative">
       
-      {/* 1. HEADER & ADD BUTTON */}
-      <div className="flex justify-between items-center mb-4 px-1">
-        <p className="text-sm text-slate-400 font-medium">
-          {notes.length} Catatan tersimpan
-        </p>
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h3 className="text-xl font-bold text-slate-700">Catatan Saya</h3>
+          <p className="text-sm text-slate-400">{notes.length} catatan tersimpan</p>
+        </div>
+        
         <button 
           onClick={() => {
-            // Pastikan saat klik "Buat Baru", state edit bersih
-            setEditingId(null);
+            setEditingId(null); // Pastikan mode-nya "New"
             setInput({ title: '', content: '' });
             setIsAdding(true);
-          }}
-          className="bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-md"
+          }} 
+          className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 shadow-lg active:scale-95"
         >
-          <Plus size={16} /> Buat Baru
+          <Plus size={24} />
         </button>
       </div>
 
-      {/* 2. FORM INPUT (Overlay Modal Kecil) */}
-      <AnimatePresence>
-        {isAdding && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-12 left-0 right-0 z-20 bg-white border border-slate-200 shadow-xl rounded-2xl p-4 mx-1"
-          >
-            <div className="flex justify-between items-start mb-2">
-              {/* Judul dinamis tergantung sedang edit atau tambah baru */}
-              <h4 className="font-bold text-slate-700">
-                {editingId ? 'Edit Catatan' : 'Tulis Catatan'}
-              </h4>
-              <button onClick={closeForm} className="text-slate-300 hover:text-slate-500">
-                <X size={18}/>
-              </button>
-            </div>
-            <input 
-              className="w-full text-lg font-bold text-slate-800 placeholder:text-slate-300 outline-none mb-2"
-              placeholder="Judul (Contoh: Tugas RPL)"
-              value={input.title}
-              onChange={(e) => setInput({...input, title: e.target.value})}
-              autoFocus
-            />
-            <textarea 
-              className="w-full h-20 text-sm text-slate-600 placeholder:text-slate-300 outline-none resize-none"
-              placeholder="Isi catatan disini..."
-              value={input.content}
-              onChange={(e) => setInput({...input, content: e.target.value})}
-            />
-            <div className="flex justify-end mt-2">
-              <button 
-                onClick={handleSave}
-                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm active:scale-95 transition-transform flex items-center gap-2"
-              >
-                <Save size={16} /> {editingId ? 'Update' : 'Simpan'}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 3. LIST NOTES (Masonry Grid) */}
-      <div className="flex-1 overflow-y-auto pb-20 pr-1">
-        {notes.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-50">
-            <Save size={48} className="mb-4" />
-            <p className="text-sm">Belum ada catatan</p>
+      {/* LIST NOTES */}
+      <div className="flex-1 overflow-y-auto pr-2 pb-20 space-y-3">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-40 text-slate-400 gap-2">
+            <Loader2 className="animate-spin" /> Memuat...
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3">
-            <AnimatePresence>
-              {notes.map((note) => (
+          <AnimatePresence mode='popLayout'>
+            {notes.length === 0 ? (
+              <div className="text-center text-slate-400 mt-10">Belum ada catatan.</div>
+            ) : (
+              notes.map((note) => (
                 <motion.div
                   key={note.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  className={`p-4 rounded-2xl border ${note.color} relative group transition-shadow hover:shadow-sm`}
+                  layout // <-- Biar animasinya smooth pas geser
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className={`p-5 rounded-2xl border ${note.color} relative group hover:shadow-md transition-all`}
                 >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider">{note.date}</span>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider">
+                      {note.date}
+                    </span>
                     
                     {/* ACTION BUTTONS */}
-                    <div className="flex gap-2">
-                      {/* Tombol Edit Baru */}
+                    <div className="flex gap-1">
+                      {/* TOMBOL EDIT */}
                       <button 
-                        onClick={() => startEdit(note)}
-                        className="text-slate-800/20 hover:text-blue-600 transition-colors"
+                        onClick={() => startEdit(note)} // <-- Panggil fungsi edit
+                        className="text-black/20 hover:text-blue-600 transition-colors p-1"
                       >
                         <Pencil size={16} />
                       </button>
                       
-                      {/* Tombol Hapus Lama */}
+                      {/* TOMBOL HAPUS */}
                       <button 
                         onClick={() => deleteNote(note.id)}
-                        className="text-slate-800/20 hover:text-red-500 transition-colors"
+                        className="text-black/20 hover:text-red-600 transition-colors p-1"
                       >
                         <Trash2 size={16} />
                       </button>
                     </div>
-
                   </div>
-                  <h3 className="font-bold text-lg leading-tight mb-1">{note.title}</h3>
-                  <p className="text-sm opacity-90 whitespace-pre-wrap">{note.content}</p>
+                  <h4 className="font-bold text-lg mb-1">{note.title}</h4>
+                  <p className="text-sm opacity-90 whitespace-pre-line leading-relaxed">
+                    {note.content}
+                  </p>
                 </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
+              ))
+            )}
+          </AnimatePresence>
         )}
       </div>
 
+      {/* MODAL FORM */}
+      <AnimatePresence>
+        {isAdding && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex flex-col justify-end md:justify-center"
+          >
+            <motion.div 
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              className="bg-white border border-slate-200 shadow-2xl rounded-t-3xl md:rounded-2xl p-6 h-[80%] md:h-auto"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-xl text-slate-800">
+                  {editingId ? 'Edit Catatan' : 'Tulis Catatan'} {/* Ubah Judul */}
+                </h3>
+                <button 
+                  onClick={() => setIsAdding(false)}
+                  className="bg-slate-100 p-2 rounded-full text-slate-500 hover:bg-slate-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Judul Catatan..."
+                  value={input.title}
+                  onChange={(e) => setInput({ ...input, title: e.target.value })}
+                  className="w-full text-lg font-bold text-slate-800 outline-none border-b border-slate-100 pb-2 focus:border-blue-500"
+                  autoFocus
+                />
+                <textarea
+                  placeholder="Isi catatanmu di sini..."
+                  value={input.content}
+                  onChange={(e) => setInput({ ...input, content: e.target.value })}
+                  className="w-full h-40 text-slate-600 outline-none resize-none leading-relaxed"
+                ></textarea>
+                
+                <button 
+                  onClick={saveNote}
+                  disabled={!input.title || !input.content}
+                  className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex justify-center gap-2 items-center"
+                >
+                  <Save size={20} />
+                  {editingId ? 'Update Catatan' : 'Simpan Catatan'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
